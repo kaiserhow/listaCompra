@@ -1,0 +1,19 @@
+{
+  "name": "La Compra",
+  "short_name": "La Compra",
+  "description": "Tu lista de la compra inteligente",
+  "start_url": "/listaCompra/",
+  "scope": "/listaCompra/",
+  "display": "standalone",
+  "background_color": "#f5f0e8",
+  "theme_color": "#f5f0e8",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
