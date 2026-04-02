@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f5f0e8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="La Compra">
+<title>La Compra</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,700;1,9..144,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- HOME -->
+<div class="screen active" id="screen-home">
+  <div class="home-wrap">
+    <div class="home-top">
+      <div class="home-logo">La<span>Compra</span></div>
+      <div class="home-sub">tu lista de la compra</div>
+    </div>
+    <div class="home-actions">
+      <button class="big-btn" id="btn-go-lista">
+        <div class="btn-left">
+          <div class="btn-title">Lista</div>
+          <div class="btn-desc">Gestiona productos y grupos</div>
+        </div>
+        <div class="btn-icon">📋</div>
+      </button>
+      <button class="big-btn accent" id="btn-go-compra">
+        <div class="btn-left">
+          <div class="btn-title">Comprar</div>
+          <div class="btn-desc">Tacha lo que ya tienes</div>
+        </div>
+        <div class="btn-icon">🛒</div>
+      </button>
+    </div>
+    <div class="share-section">
+      <div class="share-label">Compartir lista</div>
+      <div class="share-id-row">
+        <span class="share-id" id="share-id-display">...</span>
+        <button class="icon-btn" id="btn-copy-id" title="Copiar ID">📋</button>
+        <button class="icon-btn" id="btn-share-link" title="Compartir enlace">🔗</button>
+      </div>
+      <div class="join-row">
+        <input class="form-input small" id="input-join-id" placeholder="Pegar ID para unirse...">
+        <button class="small-btn" id="btn-join">Unirse</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LISTA -->
+<div class="screen" id="screen-lista">
+  <div class="app-header">
+    <button class="back-btn" id="back-lista">← Inicio</button>
+    <h1>Mi <span>Lista</span></h1>
+  </div>
+  <div class="screen-inner">
+    <div class="groups-row" id="groups-row"></div>
+    <div class="add-form" id="add-form">
+      <div class="add-form-row">
+        <input class="form-input" id="input-name" placeholder="Nombre del producto..." autocomplete="off">
+        <input class="form-input qty" id="input-qty" placeholder="Cantidad" type="text" autocomplete="off">
+      </div>
+      <div class="add-form-row">
+        <select class="form-input" id="input-group"></select>
+        <button class="add-btn" id="btn-add-product">Añadir</button>
+      </div>
+    </div>
+    <div id="product-list-wrap">
+      <div class="product-list" id="product-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPRA SELECT -->
+<div class="screen" id="screen-compra-select">
+  <div class="app-header">
+    <button class="back-btn" id="back-compra-select">← Inicio</button>
+    <h1>¿Qué <span>lista</span>?</h1>
+  </div>
+  <div class="screen-inner">
+    <div class="list-selector" id="list-selector"></div>
+  </div>
+</div>
+
+<!-- COMPRA MODE -->
+<div class="screen" id="screen-compra">
+  <div class="app-header">
+    <button class="back-btn" id="compra-back-btn">← Volver</button>
+    <h1 id="compra-title">Haciendo <span>la compra</span></h1>
+  </div>
+  <div class="screen-inner">
+    <div class="shopping-header">
+      <span class="shopping-subtitle" id="shopping-subtitle"></span>
+      <span class="progress-pill" id="progress-pill">0 / 0</span>
+    </div>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+    <div class="product-list" id="shop-list"></div>
+    <button class="reset-btn" id="btn-reset-checks">Reiniciar marcas</button>
+  </div>
+</div>
+
+<!-- Modal nuevo grupo -->
+<div class="modal-overlay" id="modal-group">
+  <div class="modal">
+    <h3>Nuevo grupo</h3>
+    <input class="form-input" id="modal-group-input" placeholder="Ej: Frutería, Carnicería..." style="width:100%">
+    <div class="modal-btns">
+      <button class="modal-btn" id="modal-group-cancel">Cancelar</button>
+      <button class="modal-btn primary" id="modal-group-confirm">Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal loading -->
+<div class="modal-overlay" id="modal-loading">
+  <div class="modal loading-modal">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">Cargando...</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body>
+</html>
