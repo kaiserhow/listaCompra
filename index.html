@@ -4,11 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#f5f0e8">
-
-<title>La Compra</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="La Compra">
+<title>La Compra</title>
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -206,6 +205,13 @@ body {
 .group-chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .group-chip.add-group { border-style: dashed; color: var(--muted); }
 .group-chip.add-group:hover { border-color: var(--ink); color: var(--ink); }
+.chip-name { cursor: pointer; }
+.chip-del {
+  margin-left: 6px; font-size: 11px; opacity: 0.5;
+  cursor: pointer; transition: opacity 0.15s;
+  padding: 0 2px;
+}
+.chip-del:hover { opacity: 1; color: var(--accent); }
 
 /* Add form */
 .add-form {
@@ -498,6 +504,19 @@ body {
   </div>
 </div>
 
+<!-- Modal eliminar grupo -->
+<div class="modal-overlay" id="modal-delete-group">
+  <div class="modal">
+    <h3>Eliminar grupo</h3>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:4px">¿Eliminar el grupo <strong id="modal-delete-group-name"></strong>?</p>
+    <p style="font-size:13px;color:var(--accent)" id="modal-delete-group-count"></p>
+    <div class="modal-btns">
+      <button class="modal-btn" id="modal-delete-group-cancel">Cancelar</button>
+      <button class="modal-btn primary" id="modal-delete-group-confirm" style="background:var(--accent);border-color:var(--accent)">Eliminar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal nuevo grupo -->
 <div class="modal-overlay" id="modal-group">
   <div class="modal">
@@ -542,33 +561,21 @@ let USER_ID = getUserId();
 // ===== STATE =====
 let groups = [];
 let products = [];
-let checked = {}; // { product_id: true }
+let checked = {};
 let activeGroup = null;
 let currentShopGroup = null;
+let groupToDelete = null;
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
   showLoading('Cargando tu lista...');
-  await ensureTablesExist();
   await loadAll();
   hideLoading();
   document.getElementById('share-id-display').textContent = USER_ID.slice(0, 8) + '...';
   document.getElementById('share-id-display').title = USER_ID;
+  checkUrlId();
 });
-
-// ===== DB SETUP =====
-async function ensureTablesExist() {
-  // Try to select — if tables don't exist, create them via RPC or just proceed
-  // Tables should be pre-created in Supabase; we just handle gracefully
-  try {
-    await db.from('groups').select('id').limit(1);
-    await db.from('products').select('id').limit(1);
-    await db.from('checked').select('id').limit(1);
-  } catch(e) {
-    console.warn('Tables might not exist yet:', e);
-  }
-}
 
 // ===== LOAD DATA =====
 async function loadAll() {
@@ -586,10 +593,6 @@ async function loadGroups() {
 
   if (error) { console.error('loadGroups', error); return; }
   groups = data || [];
-  if (groups.length === 0) {
-    await createGroup('General');
-    await loadGroups();
-  }
   if (!activeGroup || !groups.find(g => g.id === activeGroup)) {
     activeGroup = groups[0]?.id || null;
   }
@@ -628,6 +631,42 @@ async function createGroup(name) {
   return data;
 }
 
+// ===== DELETE GROUP =====
+function confirmDeleteGroup(group) {
+  groupToDelete = group;
+  const count = products.filter(p => p.group_id === group.id).length;
+  const modal = document.getElementById('modal-delete-group');
+  document.getElementById('modal-delete-group-name').textContent = group.name;
+  document.getElementById('modal-delete-group-count').textContent = count > 0
+    ? `Esto eliminará también ${count} producto${count !== 1 ? 's' : ''} del grupo.`
+    : '';
+  modal.classList.add('visible');
+}
+
+async function doDeleteGroup() {
+  if (!groupToDelete) return;
+  closeModal('modal-delete-group');
+  showLoading('Eliminando grupo...');
+
+  const { error } = await db
+    .from('groups')
+    .delete()
+    .eq('id', groupToDelete.id)
+    .eq('user_id', USER_ID);
+
+  if (error) { hideLoading(); showToast('Error al eliminar grupo'); return; }
+
+  groups = groups.filter(g => g.id !== groupToDelete.id);
+  products = products.filter(p => p.group_id !== groupToDelete.id);
+  if (activeGroup === groupToDelete.id) {
+    activeGroup = groups[0]?.id || null;
+  }
+  groupToDelete = null;
+  hideLoading();
+  renderLista();
+  showToast('Grupo eliminado');
+}
+
 // ===== BIND EVENTS =====
 function bindEvents() {
   // Home
@@ -651,6 +690,11 @@ function bindEvents() {
   document.getElementById('modal-group-confirm').onclick = confirmNewGroup;
   document.getElementById('modal-group-input').addEventListener('keydown', e => { if (e.key === 'Enter') confirmNewGroup(); });
   document.getElementById('modal-group').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal('modal-group'); });
+
+  // Modal delete group
+  document.getElementById('modal-delete-group-cancel').onclick = () => closeModal('modal-delete-group');
+  document.getElementById('modal-delete-group-confirm').onclick = doDeleteGroup;
+  document.getElementById('modal-delete-group').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal('modal-delete-group'); });
 
   // Reset checks
   document.getElementById('btn-reset-checks').onclick = resetChecks;
@@ -690,13 +734,28 @@ function renderLista() {
 function renderGroups() {
   const row = document.getElementById('groups-row');
   row.innerHTML = '';
+
+  if (groups.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'group-chip add-group';
+    empty.textContent = '+ Crear primer grupo';
+    empty.onclick = openNewGroupModal;
+    row.appendChild(empty);
+    return;
+  }
+
   groups.forEach(g => {
+    const isOwner = g.user_id === USER_ID;
     const chip = document.createElement('div');
     chip.className = 'group-chip' + (g.id === activeGroup ? ' active' : '');
-    chip.textContent = g.name;
-    chip.onclick = () => { activeGroup = g.id; renderLista(); };
+    chip.innerHTML = `<span class="chip-name">${escHtml(g.name)}</span>${isOwner ? `<span class="chip-del" title="Eliminar">✕</span>` : ''}`;
+    chip.querySelector('.chip-name').onclick = () => { activeGroup = g.id; renderLista(); };
+    if (isOwner) {
+      chip.querySelector('.chip-del').onclick = (e) => { e.stopPropagation(); confirmDeleteGroup(g); };
+    }
     row.appendChild(chip);
   });
+
   const add = document.createElement('div');
   add.className = 'group-chip add-group';
   add.textContent = '+ Grupo';
@@ -706,12 +765,22 @@ function renderGroups() {
 
 function renderGroupSelect() {
   const sel = document.getElementById('input-group');
-  sel.innerHTML = groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+  if (groups.length === 0) {
+    sel.innerHTML = '<option value="">— crea un grupo primero —</option>';
+    return;
+  }
+  sel.innerHTML = groups.map(g => `<option value="${g.id}">${escHtml(g.name)}</option>`).join('');
   if (activeGroup) sel.value = activeGroup;
 }
 
 function renderProductList() {
   const list = document.getElementById('product-list');
+
+  if (groups.length === 0) {
+    list.innerHTML = `<div class="empty-state"><span class="emoji">👆</span>Crea un grupo para empezar</div>`;
+    return;
+  }
+
   const activeGroupObj = groups.find(g => g.id === activeGroup);
   const items = products.filter(p => p.group_id === activeGroup);
 
@@ -749,6 +818,7 @@ async function addProduct() {
   const group_id = groupEl.value;
 
   if (!name) { showToast('Escribe un nombre'); nameEl.focus(); return; }
+  if (!group_id) { showToast('Crea un grupo primero'); openNewGroupModal(); return; }
 
   const btn = document.getElementById('btn-add-product');
   btn.disabled = true;
@@ -821,7 +891,6 @@ function renderCompraSelect() {
 
   container.innerHTML = '';
 
-  // "All" option
   const allItem = document.createElement('div');
   allItem.className = 'list-select-item';
   allItem.innerHTML = `<div><div class="lsi-name">🛒 Todos los productos</div><div class="lsi-count">${products.length} producto${products.length !== 1 ? 's' : ''}</div></div><div class="lsi-arrow">→</div>`;
@@ -875,7 +944,6 @@ function renderShopList() {
   }
 
   if (!currentShopGroup) {
-    // Group by group
     const byGroup = {};
     visibleProducts.forEach(p => {
       if (!byGroup[p.group_id]) byGroup[p.group_id] = [];
@@ -906,16 +974,8 @@ function shopItemHTML(p) {
 
 async function toggleCheck(productId) {
   const isNowChecked = !checked[productId];
-
-  // Optimistic update
-  if (isNowChecked) {
-    checked[productId] = true;
-  } else {
-    delete checked[productId];
-  }
+  if (isNowChecked) { checked[productId] = true; } else { delete checked[productId]; }
   renderShopList();
-
-  // Persist
   if (isNowChecked) {
     await db.from('checked').upsert({ user_id: USER_ID, product_id: productId });
   } else {
@@ -927,10 +987,8 @@ async function resetChecks() {
   const visibleProducts = currentShopGroup
     ? products.filter(p => p.group_id === currentShopGroup)
     : products;
-
   visibleProducts.forEach(p => delete checked[p.id]);
   renderShopList();
-
   const ids = visibleProducts.map(p => p.id);
   await db.from('checked').delete().eq('user_id', USER_ID).in('product_id', ids);
   showToast('Marcas reiniciadas');
@@ -939,7 +997,6 @@ async function resetChecks() {
 // ===== SHARE / JOIN =====
 function copyId() {
   navigator.clipboard.writeText(USER_ID).then(() => showToast('ID copiado ✓')).catch(() => {
-    // fallback
     const el = document.createElement('textarea');
     el.value = USER_ID;
     document.body.appendChild(el);
@@ -962,20 +1019,12 @@ function shareLink() {
 async function joinId() {
   const input = document.getElementById('input-join-id').value.trim();
   if (!input) return;
-  // Accept short form or full UUID
   const newId = input.length === 36 ? input : null;
-  if (!newId) {
-    showToast('ID no válido (necesitas el UUID completo)');
-    return;
-  }
-  // Verify it exists
+  if (!newId) { showToast('ID no válido'); return; }
   showLoading('Buscando lista...');
   const { data } = await db.from('groups').select('id').eq('user_id', newId).limit(1);
   hideLoading();
-  if (!data || data.length === 0) {
-    showToast('No se encontró esa lista');
-    return;
-  }
+  if (!data || data.length === 0) { showToast('No se encontró esa lista'); return; }
   USER_ID = newId;
   localStorage.setItem('lacompra_uid', newId);
   document.getElementById('input-join-id').value = '';
@@ -987,16 +1036,14 @@ async function joinId() {
   renderLista();
 }
 
-// Check URL for shared ID on load
-(function checkUrlId() {
+function checkUrlId() {
   const params = new URLSearchParams(window.location.search);
   const urlId = params.get('id');
   if (urlId && urlId.length === 36 && urlId !== USER_ID) {
     document.getElementById('input-join-id').value = urlId;
-    // Auto-join after a moment
     setTimeout(() => joinId(), 800);
   }
-})();
+}
 
 // ===== MODAL HELPERS =====
 function closeModal(id) {
@@ -1033,18 +1080,5 @@ function escHtml(str) {
 }
 
 </script>
-<<<<<<< HEAD
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs => {
-    regs.forEach(reg => reg.unregister());
-  });
-  navigator.serviceWorker.register('sw.js').then(reg => {
-    reg.update();
-  });
-}
-</script>
-=======
->>>>>>> 16119373098e72bd37d0e2e8a3e823ecd026ed50
 </body>
 </html>
