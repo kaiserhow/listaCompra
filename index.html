@@ -410,6 +410,39 @@ body {
 }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
+/* ===== GROUP CHIPS WITH ACTIONS ===== */
+.groups-section-label {
+  font-size: 10px; color: var(--muted); letter-spacing: 1px;
+  text-transform: uppercase; font-weight: 500;
+  display: flex; align-items: center; padding: 0 4px;
+  flex-shrink: 0;
+}
+.group-chip.shared {
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+.group-chip.shared.active {
+  background: var(--accent2); color: #fff; border-color: var(--accent2);
+}
+.chip-name { cursor: pointer; }
+.chip-share {
+  margin-left: 6px; font-size: 12px; cursor: pointer;
+  opacity: 0.5; transition: opacity 0.15s; padding: 0 1px;
+}
+.chip-share:hover { opacity: 1; }
+.chip-del {
+  margin-left: 4px; font-size: 11px; opacity: 0.4;
+  cursor: pointer; transition: opacity 0.15s; padding: 0 2px;
+}
+.chip-del:hover { opacity: 1; color: var(--accent); }
+
+/* Shared badge in compra select */
+.shared-badge {
+  font-size: 10px; padding: 2px 6px; border-radius: 99px;
+  background: var(--accent2); color: #fff;
+  vertical-align: middle; margin-left: 6px;
+}
+
 </style>
 </head>
 <body>
@@ -437,18 +470,6 @@ body {
         <div class="btn-icon">🛒</div>
       </button>
     </div>
-    <div class="share-section">
-      <div class="share-label">Compartir lista</div>
-      <div class="share-id-row">
-        <span class="share-id" id="share-id-display">...</span>
-        <button class="icon-btn" id="btn-copy-id" title="Copiar ID">📋</button>
-        <button class="icon-btn" id="btn-share-link" title="Compartir enlace">🔗</button>
-      </div>
-      <div class="join-row">
-        <input class="form-input small" id="input-join-id" placeholder="Pegar ID para unirse...">
-        <button class="small-btn" id="btn-join">Unirse</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -460,7 +481,7 @@ body {
   </div>
   <div class="screen-inner">
     <div class="groups-row" id="groups-row"></div>
-    <div class="add-form" id="add-form">
+    <div class="add-form">
       <div class="add-form-row">
         <input class="form-input" id="input-name" placeholder="Nombre del producto..." autocomplete="off">
         <input class="form-input qty" id="input-qty" placeholder="Cantidad" type="text" autocomplete="off">
@@ -470,9 +491,7 @@ body {
         <button class="add-btn" id="btn-add-product">Añadir</button>
       </div>
     </div>
-    <div id="product-list-wrap">
-      <div class="product-list" id="product-list"></div>
-    </div>
+    <div class="product-list" id="product-list"></div>
   </div>
 </div>
 
@@ -491,7 +510,7 @@ body {
 <div class="screen" id="screen-compra">
   <div class="app-header">
     <button class="back-btn" id="compra-back-btn">← Volver</button>
-    <h1 id="compra-title">Haciendo <span>la compra</span></h1>
+    <h1>Haciendo <span>la compra</span></h1>
   </div>
   <div class="screen-inner">
     <div class="shopping-header">
@@ -504,27 +523,27 @@ body {
   </div>
 </div>
 
+<!-- Modal nuevo grupo -->
+<div class="modal-overlay" id="modal-group">
+  <div class="modal">
+    <h3>Nuevo grupo</h3>
+    <input class="form-input" id="modal-group-input" placeholder="Ej: Frutería, Barbacoa..." style="width:100%">
+    <div class="modal-btns">
+      <button class="modal-btn" id="modal-group-cancel">Cancelar</button>
+      <button class="modal-btn primary" id="modal-group-confirm">Crear</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal eliminar grupo -->
 <div class="modal-overlay" id="modal-delete-group">
   <div class="modal">
     <h3>Eliminar grupo</h3>
     <p style="font-size:14px;color:var(--muted);margin-bottom:4px">¿Eliminar el grupo <strong id="modal-delete-group-name"></strong>?</p>
-    <p style="font-size:13px;color:var(--accent)" id="modal-delete-group-count"></p>
+    <p style="font-size:13px;color:var(--accent);margin-top:6px" id="modal-delete-group-count"></p>
     <div class="modal-btns">
       <button class="modal-btn" id="modal-delete-group-cancel">Cancelar</button>
       <button class="modal-btn primary" id="modal-delete-group-confirm" style="background:var(--accent);border-color:var(--accent)">Eliminar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal nuevo grupo -->
-<div class="modal-overlay" id="modal-group">
-  <div class="modal">
-    <h3>Nuevo grupo</h3>
-    <input class="form-input" id="modal-group-input" placeholder="Ej: Frutería, Carnicería..." style="width:100%">
-    <div class="modal-btns">
-      <button class="modal-btn" id="modal-group-cancel">Cancelar</button>
-      <button class="modal-btn primary" id="modal-group-confirm">Crear</button>
     </div>
   </div>
 </div>
@@ -559,10 +578,12 @@ function getUserId() {
 let USER_ID = getUserId();
 
 // ===== STATE =====
-let groups = [];
+let groups = [];       // grupos propios (creados por este user)
+let sharedGroups = []; // grupos compartidos conmigo
 let products = [];
 let checked = {};
 let activeGroup = null;
+let activeGroupIsShared = false;
 let currentShopGroup = null;
 let groupToDelete = null;
 
@@ -572,9 +593,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   showLoading('Cargando tu lista...');
   await loadAll();
   hideLoading();
-  document.getElementById('share-id-display').textContent = USER_ID.slice(0, 8) + '...';
-  document.getElementById('share-id-display').title = USER_ID;
-  checkUrlId();
+  await checkUrlInvite();
 });
 
 // ===== LOAD DATA =====
@@ -585,37 +604,57 @@ async function loadAll() {
 }
 
 async function loadGroups() {
-  const { data, error } = await db
+  // Own groups
+  const { data: own } = await db
     .from('groups')
     .select('*')
     .eq('user_id', USER_ID)
     .order('created_at', { ascending: true });
+  groups = own || [];
 
-  if (error) { console.error('loadGroups', error); return; }
-  groups = data || [];
-  if (!activeGroup || !groups.find(g => g.id === activeGroup)) {
-    activeGroup = groups[0]?.id || null;
+  // Shared groups (via group_members)
+  const { data: memberships } = await db
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', USER_ID);
+
+  if (memberships && memberships.length > 0) {
+    const ids = memberships.map(m => m.group_id);
+    const { data: shared } = await db
+      .from('groups')
+      .select('*')
+      .in('id', ids)
+      .order('created_at', { ascending: true });
+    sharedGroups = (shared || []).filter(g => g.user_id !== USER_ID);
+  } else {
+    sharedGroups = [];
+  }
+
+  const allGroups = [...groups, ...sharedGroups];
+  if (!activeGroup || !allGroups.find(g => g.id === activeGroup)) {
+    activeGroup = allGroups[0]?.id || null;
+    activeGroupIsShared = sharedGroups.some(g => g.id === activeGroup);
   }
 }
 
 async function loadProducts() {
-  const { data, error } = await db
+  const allGroups = [...groups, ...sharedGroups];
+  if (allGroups.length === 0) { products = []; return; }
+  const ids = allGroups.map(g => g.id);
+
+  const { data } = await db
     .from('products')
     .select('*')
-    .eq('user_id', USER_ID)
+    .in('group_id', ids)
     .order('created_at', { ascending: true });
-
-  if (error) { console.error('loadProducts', error); return; }
   products = data || [];
 }
 
 async function loadChecked() {
-  const { data, error } = await db
+  const { data } = await db
     .from('checked')
     .select('*')
     .eq('user_id', USER_ID);
-
-  if (error) { console.error('loadChecked', error); return; }
   checked = {};
   (data || []).forEach(r => { checked[r.product_id] = true; });
 }
@@ -627,7 +666,7 @@ async function createGroup(name) {
     .insert({ user_id: USER_ID, name })
     .select()
     .single();
-  if (error) { console.error('createGroup', error); showToast('Error creando grupo'); return null; }
+  if (error) { showToast('Error creando grupo'); return null; }
   return data;
 }
 
@@ -635,68 +674,114 @@ async function createGroup(name) {
 function confirmDeleteGroup(group) {
   groupToDelete = group;
   const count = products.filter(p => p.group_id === group.id).length;
-  const modal = document.getElementById('modal-delete-group');
   document.getElementById('modal-delete-group-name').textContent = group.name;
   document.getElementById('modal-delete-group-count').textContent = count > 0
     ? `Esto eliminará también ${count} producto${count !== 1 ? 's' : ''} del grupo.`
     : '';
-  modal.classList.add('visible');
+  document.getElementById('modal-delete-group').classList.add('visible');
 }
 
 async function doDeleteGroup() {
   if (!groupToDelete) return;
   closeModal('modal-delete-group');
   showLoading('Eliminando grupo...');
-
-  const { error } = await db
-    .from('groups')
-    .delete()
-    .eq('id', groupToDelete.id)
-    .eq('user_id', USER_ID);
-
-  if (error) { hideLoading(); showToast('Error al eliminar grupo'); return; }
-
+  await db.from('groups').delete().eq('id', groupToDelete.id).eq('user_id', USER_ID);
   groups = groups.filter(g => g.id !== groupToDelete.id);
   products = products.filter(p => p.group_id !== groupToDelete.id);
-  if (activeGroup === groupToDelete.id) {
-    activeGroup = groups[0]?.id || null;
-  }
+  if (activeGroup === groupToDelete.id) activeGroup = groups[0]?.id || sharedGroups[0]?.id || null;
   groupToDelete = null;
   hideLoading();
   renderLista();
   showToast('Grupo eliminado');
 }
 
+// ===== LEAVE SHARED GROUP =====
+async function leaveSharedGroup(group) {
+  showLoading('Saliendo del grupo...');
+  await db.from('group_members').delete().eq('group_id', group.id).eq('user_id', USER_ID);
+  sharedGroups = sharedGroups.filter(g => g.id !== group.id);
+  products = products.filter(p => p.group_id !== group.id);
+  if (activeGroup === group.id) activeGroup = groups[0]?.id || sharedGroups[0]?.id || null;
+  hideLoading();
+  renderLista();
+  showToast(`Has salido de "${group.name}"`);
+}
+
+// ===== SHARE GROUP =====
+async function shareGroup(group) {
+  // Get invite_code for this group
+  const { data } = await db.from('groups').select('invite_code').eq('id', group.id).single();
+  if (!data?.invite_code) { showToast('Error al obtener enlace'); return; }
+
+  const url = `${window.location.origin}${window.location.pathname}?invite=${data.invite_code}`;
+  if (navigator.share) {
+    navigator.share({ title: `Lista: ${group.name}`, text: `Únete a mi lista "${group.name}"`, url });
+  } else {
+    navigator.clipboard.writeText(url).then(() => showToast(`Enlace de "${group.name}" copiado ✓`));
+  }
+}
+
+// ===== JOIN VIA INVITE =====
+async function checkUrlInvite() {
+  const params = new URLSearchParams(window.location.search);
+  const invite = params.get('invite');
+  if (!invite) return;
+
+  // Clean URL
+  window.history.replaceState({}, '', window.location.pathname);
+
+  showLoading('Uniéndote al grupo...');
+  const { data: group } = await db
+    .from('groups')
+    .select('*')
+    .eq('invite_code', invite)
+    .single();
+
+  if (!group) { hideLoading(); showToast('Invitación no válida'); return; }
+  if (group.user_id === USER_ID) { hideLoading(); showToast('Ya eres el creador de este grupo'); return; }
+
+  // Already a member?
+  const { data: existing } = await db
+    .from('group_members')
+    .select('id')
+    .eq('group_id', group.id)
+    .eq('user_id', USER_ID)
+    .maybeSingle();
+
+  if (!existing) {
+    await db.from('group_members').insert({ group_id: group.id, user_id: USER_ID });
+  }
+
+  await loadAll();
+  activeGroup = group.id;
+  activeGroupIsShared = true;
+  hideLoading();
+  renderLista();
+  goTo('screen-lista');
+  showToast(`Te has unido a "${group.name}" ✓`);
+}
+
 // ===== BIND EVENTS =====
 function bindEvents() {
-  // Home
   document.getElementById('btn-go-lista').onclick = () => goTo('screen-lista');
   document.getElementById('btn-go-compra').onclick = () => goToCompra();
-  document.getElementById('btn-copy-id').onclick = copyId;
-  document.getElementById('btn-share-link').onclick = shareLink;
-  document.getElementById('btn-join').onclick = joinId;
 
-  // Lista
   document.getElementById('back-lista').onclick = () => goTo('screen-home');
   document.getElementById('btn-add-product').onclick = addProduct;
   document.getElementById('input-name').addEventListener('keydown', e => { if (e.key === 'Enter') addProduct(); });
   document.getElementById('input-qty').addEventListener('keydown', e => { if (e.key === 'Enter') addProduct(); });
 
-  // Compra
   document.getElementById('back-compra-select').onclick = () => goTo('screen-home');
 
-  // Modal group
   document.getElementById('modal-group-cancel').onclick = () => closeModal('modal-group');
   document.getElementById('modal-group-confirm').onclick = confirmNewGroup;
   document.getElementById('modal-group-input').addEventListener('keydown', e => { if (e.key === 'Enter') confirmNewGroup(); });
   document.getElementById('modal-group').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal('modal-group'); });
 
-  // Modal delete group
   document.getElementById('modal-delete-group-cancel').onclick = () => closeModal('modal-delete-group');
   document.getElementById('modal-delete-group-confirm').onclick = doDeleteGroup;
   document.getElementById('modal-delete-group').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal('modal-delete-group'); });
 
-  // Reset checks
   document.getElementById('btn-reset-checks').onclick = resetChecks;
 }
 
@@ -712,13 +797,11 @@ async function goToCompra() {
   showLoading('Cargando lista...');
   await loadAll();
   hideLoading();
-  const groupsWithProducts = groups.filter(g => products.some(p => p.group_id === g.id));
-  if (products.length === 0) {
-    showToast('Añade productos a tu lista primero 📝');
-    return;
-  }
+  if (products.length === 0) { showToast('Añade productos a tu lista primero 📝'); return; }
+  const allGroups = [...groups, ...sharedGroups];
+  const groupsWithProducts = allGroups.filter(g => products.some(p => p.group_id === g.id));
   if (groupsWithProducts.length <= 1) {
-    startShopping(groupsWithProducts.length === 1 ? groupsWithProducts[0].id : null);
+    startShopping(groupsWithProducts[0]?.id || null);
   } else {
     goTo('screen-compra-select');
   }
@@ -734,8 +817,9 @@ function renderLista() {
 function renderGroups() {
   const row = document.getElementById('groups-row');
   row.innerHTML = '';
+  const allGroups = [...groups, ...sharedGroups];
 
-  if (groups.length === 0) {
+  if (allGroups.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'group-chip add-group';
     empty.textContent = '+ Crear primer grupo';
@@ -744,17 +828,26 @@ function renderGroups() {
     return;
   }
 
+  // Own groups
+  if (groups.length > 0) {
+    const label = document.createElement('span');
+    label.className = 'groups-section-label';
+    label.textContent = 'Mis grupos';
+    row.appendChild(label);
+  }
+
   groups.forEach(g => {
-    const isOwner = g.user_id === USER_ID;
-    const chip = document.createElement('div');
-    chip.className = 'group-chip' + (g.id === activeGroup ? ' active' : '');
-    chip.innerHTML = `<span class="chip-name">${escHtml(g.name)}</span>${isOwner ? `<span class="chip-del" title="Eliminar">✕</span>` : ''}`;
-    chip.querySelector('.chip-name').onclick = () => { activeGroup = g.id; renderLista(); };
-    if (isOwner) {
-      chip.querySelector('.chip-del').onclick = (e) => { e.stopPropagation(); confirmDeleteGroup(g); };
-    }
-    row.appendChild(chip);
+    row.appendChild(makeGroupChip(g, false));
   });
+
+  // Shared groups
+  if (sharedGroups.length > 0) {
+    const label = document.createElement('span');
+    label.className = 'groups-section-label';
+    label.textContent = 'Compartidos';
+    row.appendChild(label);
+    sharedGroups.forEach(g => row.appendChild(makeGroupChip(g, true)));
+  }
 
   const add = document.createElement('div');
   add.className = 'group-chip add-group';
@@ -763,30 +856,77 @@ function renderGroups() {
   row.appendChild(add);
 }
 
+function makeGroupChip(g, isShared) {
+  const chip = document.createElement('div');
+  chip.className = 'group-chip' + (g.id === activeGroup ? ' active' : '') + (isShared ? ' shared' : '');
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'chip-name';
+  nameSpan.textContent = g.name;
+  nameSpan.onclick = () => { activeGroup = g.id; activeGroupIsShared = isShared; renderLista(); };
+  chip.appendChild(nameSpan);
+
+  if (isShared) {
+    // Leave button for shared groups
+    const leaveBtn = document.createElement('span');
+    leaveBtn.className = 'chip-del';
+    leaveBtn.title = 'Salir del grupo';
+    leaveBtn.textContent = '✕';
+    leaveBtn.onclick = (e) => { e.stopPropagation(); leaveSharedGroup(g); };
+    chip.appendChild(leaveBtn);
+  } else {
+    // Share button
+    const shareBtn = document.createElement('span');
+    shareBtn.className = 'chip-share';
+    shareBtn.title = 'Compartir grupo';
+    shareBtn.textContent = '🔗';
+    shareBtn.onclick = (e) => { e.stopPropagation(); shareGroup(g); };
+    chip.appendChild(shareBtn);
+
+    // Delete button
+    const delBtn = document.createElement('span');
+    delBtn.className = 'chip-del';
+    delBtn.title = 'Eliminar grupo';
+    delBtn.textContent = '✕';
+    delBtn.onclick = (e) => { e.stopPropagation(); confirmDeleteGroup(g); };
+    chip.appendChild(delBtn);
+  }
+
+  return chip;
+}
+
 function renderGroupSelect() {
   const sel = document.getElementById('input-group');
-  if (groups.length === 0) {
+  const allGroups = [...groups, ...sharedGroups];
+  if (allGroups.length === 0) {
     sel.innerHTML = '<option value="">— crea un grupo primero —</option>';
     return;
   }
-  sel.innerHTML = groups.map(g => `<option value="${g.id}">${escHtml(g.name)}</option>`).join('');
+  let html = '';
+  if (groups.length > 0) {
+    html += `<optgroup label="Mis grupos">${groups.map(g => `<option value="${g.id}">${escHtml(g.name)}</option>`).join('')}</optgroup>`;
+  }
+  if (sharedGroups.length > 0) {
+    html += `<optgroup label="Compartidos">${sharedGroups.map(g => `<option value="${g.id}">${escHtml(g.name)}</option>`).join('')}</optgroup>`;
+  }
+  sel.innerHTML = html;
   if (activeGroup) sel.value = activeGroup;
 }
 
 function renderProductList() {
   const list = document.getElementById('product-list');
+  const allGroups = [...groups, ...sharedGroups];
 
-  if (groups.length === 0) {
+  if (allGroups.length === 0) {
     list.innerHTML = `<div class="empty-state"><span class="emoji">👆</span>Crea un grupo para empezar</div>`;
     return;
   }
 
-  const activeGroupObj = groups.find(g => g.id === activeGroup);
+  const activeGroupObj = allGroups.find(g => g.id === activeGroup);
   const items = products.filter(p => p.group_id === activeGroup);
 
   if (!items.length) {
-    const groupName = activeGroupObj?.name || 'este grupo';
-    list.innerHTML = `<div class="empty-state"><span class="emoji">🥬</span>Sin productos en "${groupName}"<br><small style="margin-top:6px;display:block;opacity:0.7">Añade algo arriba</small></div>`;
+    list.innerHTML = `<div class="empty-state"><span class="emoji">🥬</span>Sin productos en "${activeGroupObj?.name || ''}"<br><small style="margin-top:6px;display:block;opacity:0.7">Añade algo arriba</small></div>`;
     return;
   }
 
@@ -797,7 +937,6 @@ function renderProductList() {
         <span class="product-qty">Cantidad: ${escHtml(p.quantity)}</span>
       </div>
       <div class="product-actions">
-        <span class="group-badge">${escHtml(activeGroupObj?.name || '')}</span>
         <button class="del-btn" data-id="${p.id}">✕</button>
       </div>
     </div>
@@ -821,23 +960,18 @@ async function addProduct() {
   if (!group_id) { showToast('Crea un grupo primero'); openNewGroupModal(); return; }
 
   const btn = document.getElementById('btn-add-product');
-  btn.disabled = true;
-  btn.textContent = '...';
+  btn.disabled = true; btn.textContent = '...';
 
   const { data, error } = await db
     .from('products')
     .insert({ user_id: USER_ID, name, quantity, group_id })
-    .select()
-    .single();
+    .select().single();
 
-  btn.disabled = false;
-  btn.textContent = 'Añadir';
-
-  if (error) { console.error('addProduct', error); showToast('Error al añadir'); return; }
+  btn.disabled = false; btn.textContent = 'Añadir';
+  if (error) { showToast('Error al añadir'); return; }
 
   products.push(data);
-  nameEl.value = '';
-  qtyEl.value = '';
+  nameEl.value = ''; qtyEl.value = '';
   nameEl.focus();
   renderProductList();
   showToast(`"${name}" añadido ✓`);
@@ -845,7 +979,7 @@ async function addProduct() {
 
 // ===== DELETE PRODUCT =====
 async function deleteProduct(id) {
-  const { error } = await db.from('products').delete().eq('id', id).eq('user_id', USER_ID);
+  const { error } = await db.from('products').delete().eq('id', id);
   if (error) { showToast('Error al eliminar'); return; }
   products = products.filter(p => p.id !== id);
   delete checked[id];
@@ -863,15 +997,16 @@ function openNewGroupModal() {
 async function confirmNewGroup() {
   const name = document.getElementById('modal-group-input').value.trim();
   if (!name) return;
-  if (groups.find(g => g.name.toLowerCase() === name.toLowerCase())) {
-    showToast('Ya existe ese grupo');
-    return;
+  const allGroups = [...groups, ...sharedGroups];
+  if (allGroups.find(g => g.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Ya existe ese grupo'); return;
   }
   showLoading('Creando grupo...');
   const newGroup = await createGroup(name);
   if (newGroup) {
     groups.push(newGroup);
     activeGroup = newGroup.id;
+    activeGroupIsShared = false;
     renderLista();
     showToast(`Grupo "${name}" creado ✓`);
   }
@@ -882,10 +1017,11 @@ async function confirmNewGroup() {
 // ===== COMPRA SELECT =====
 function renderCompraSelect() {
   const container = document.getElementById('list-selector');
-  const groupsWithProducts = groups.filter(g => products.some(p => p.group_id === g.id));
+  const allGroups = [...groups, ...sharedGroups];
+  const groupsWithProducts = allGroups.filter(g => products.some(p => p.group_id === g.id));
 
   if (products.length === 0) {
-    container.innerHTML = `<div class="empty-state"><span class="emoji">📝</span>Añade productos a tu lista primero</div>`;
+    container.innerHTML = `<div class="empty-state"><span class="emoji">📝</span>Añade productos primero</div>`;
     return;
   }
 
@@ -893,15 +1029,16 @@ function renderCompraSelect() {
 
   const allItem = document.createElement('div');
   allItem.className = 'list-select-item';
-  allItem.innerHTML = `<div><div class="lsi-name">🛒 Todos los productos</div><div class="lsi-count">${products.length} producto${products.length !== 1 ? 's' : ''}</div></div><div class="lsi-arrow">→</div>`;
+  allItem.innerHTML = `<div><div class="lsi-name">🛒 Todos</div><div class="lsi-count">${products.length} productos</div></div><div class="lsi-arrow">→</div>`;
   allItem.onclick = () => startShopping(null);
   container.appendChild(allItem);
 
   groupsWithProducts.forEach(g => {
     const count = products.filter(p => p.group_id === g.id).length;
+    const isShared = sharedGroups.some(sg => sg.id === g.id);
     const item = document.createElement('div');
     item.className = 'list-select-item';
-    item.innerHTML = `<div><div class="lsi-name">${escHtml(g.name)}</div><div class="lsi-count">${count} producto${count !== 1 ? 's' : ''}</div></div><div class="lsi-arrow">→</div>`;
+    item.innerHTML = `<div><div class="lsi-name">${escHtml(g.name)}${isShared ? ' <span class="shared-badge">compartido</span>' : ''}</div><div class="lsi-count">${count} producto${count !== 1 ? 's' : ''}</div></div><div class="lsi-arrow">→</div>`;
     item.onclick = () => startShopping(g.id);
     container.appendChild(item);
   });
@@ -910,34 +1047,32 @@ function renderCompraSelect() {
 // ===== SHOPPING MODE =====
 function startShopping(groupId) {
   currentShopGroup = groupId;
-  const hasMultiple = groups.filter(g => products.some(p => p.group_id === g.id)).length > 1;
+  const allGroups = [...groups, ...sharedGroups];
+  const hasMultiple = allGroups.filter(g => products.some(p => p.group_id === g.id)).length > 1;
 
   document.getElementById('compra-back-btn').onclick = () => {
     if (hasMultiple) goTo('screen-compra-select');
     else goTo('screen-home');
   };
 
-  const groupName = groupId ? (groups.find(g => g.id === groupId)?.name || '') : 'Toda la lista';
+  const groupName = groupId ? (allGroups.find(g => g.id === groupId)?.name || '') : 'Toda la lista';
   document.getElementById('shopping-subtitle').textContent = groupName;
-
   renderShopList();
   goTo('screen-compra');
 }
 
 function renderShopList() {
+  const allGroups = [...groups, ...sharedGroups];
   const visibleProducts = currentShopGroup
     ? products.filter(p => p.group_id === currentShopGroup)
     : products;
 
   const total = visibleProducts.length;
   const done = visibleProducts.filter(p => checked[p.id]).length;
-
   document.getElementById('progress-pill').textContent = `${done} / ${total}`;
-  const pct = total ? (done / total) * 100 : 0;
-  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-bar').style.width = (total ? (done / total) * 100 : 0) + '%';
 
   const list = document.getElementById('shop-list');
-
   if (!visibleProducts.length) {
     list.innerHTML = `<div class="empty-state"><span class="emoji">✅</span>Sin productos</div>`;
     return;
@@ -950,9 +1085,8 @@ function renderShopList() {
       byGroup[p.group_id].push(p);
     });
     list.innerHTML = Object.entries(byGroup).map(([gid, items]) => {
-      const gName = groups.find(g => g.id === gid)?.name || '';
-      return `<div class="shop-group-label">${escHtml(gName)}</div>` +
-        items.map(p => shopItemHTML(p)).join('');
+      const gName = allGroups.find(g => g.id === gid)?.name || '';
+      return `<div class="shop-group-label">${escHtml(gName)}</div>` + items.map(p => shopItemHTML(p)).join('');
     }).join('');
   } else {
     list.innerHTML = visibleProducts.map(p => shopItemHTML(p)).join('');
@@ -984,9 +1118,7 @@ async function toggleCheck(productId) {
 }
 
 async function resetChecks() {
-  const visibleProducts = currentShopGroup
-    ? products.filter(p => p.group_id === currentShopGroup)
-    : products;
+  const visibleProducts = currentShopGroup ? products.filter(p => p.group_id === currentShopGroup) : products;
   visibleProducts.forEach(p => delete checked[p.id]);
   renderShopList();
   const ids = visibleProducts.map(p => p.id);
@@ -994,70 +1126,13 @@ async function resetChecks() {
   showToast('Marcas reiniciadas');
 }
 
-// ===== SHARE / JOIN =====
-function copyId() {
-  navigator.clipboard.writeText(USER_ID).then(() => showToast('ID copiado ✓')).catch(() => {
-    const el = document.createElement('textarea');
-    el.value = USER_ID;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
-    showToast('ID copiado ✓');
-  });
-}
-
-function shareLink() {
-  const url = `${window.location.origin}${window.location.pathname}?id=${USER_ID}`;
-  if (navigator.share) {
-    navigator.share({ title: 'La Compra', text: 'Únete a mi lista de la compra', url });
-  } else {
-    navigator.clipboard.writeText(url).then(() => showToast('Enlace copiado ✓'));
-  }
-}
-
-async function joinId() {
-  const input = document.getElementById('input-join-id').value.trim();
-  if (!input) return;
-  const newId = input.length === 36 ? input : null;
-  if (!newId) { showToast('ID no válido'); return; }
-  showLoading('Buscando lista...');
-  const { data } = await db.from('groups').select('id').eq('user_id', newId).limit(1);
-  hideLoading();
-  if (!data || data.length === 0) { showToast('No se encontró esa lista'); return; }
-  USER_ID = newId;
-  localStorage.setItem('lacompra_uid', newId);
-  document.getElementById('input-join-id').value = '';
-  document.getElementById('share-id-display').textContent = USER_ID.slice(0, 8) + '...';
-  showLoading('Cargando lista compartida...');
-  await loadAll();
-  hideLoading();
-  showToast('Lista cargada ✓');
-  renderLista();
-}
-
-function checkUrlId() {
-  const params = new URLSearchParams(window.location.search);
-  const urlId = params.get('id');
-  if (urlId && urlId.length === 36 && urlId !== USER_ID) {
-    document.getElementById('input-join-id').value = urlId;
-    setTimeout(() => joinId(), 800);
-  }
-}
-
 // ===== MODAL HELPERS =====
-function closeModal(id) {
-  document.getElementById(id).classList.remove('visible');
-}
-
+function closeModal(id) { document.getElementById(id).classList.remove('visible'); }
 function showLoading(text = 'Cargando...') {
   document.getElementById('loading-text').textContent = text;
   document.getElementById('modal-loading').classList.add('visible');
 }
-
-function hideLoading() {
-  document.getElementById('modal-loading').classList.remove('visible');
-}
+function hideLoading() { document.getElementById('modal-loading').classList.remove('visible'); }
 
 // ===== TOAST =====
 let toastTimer;
@@ -1072,13 +1147,15 @@ function showToast(msg) {
 // ===== UTILS =====
 function escHtml(str) {
   if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+  navigator.serviceWorker.register('sw.js').then(r => r.update());
+}
 </script>
 </body>
 </html>
